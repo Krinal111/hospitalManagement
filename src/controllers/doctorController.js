@@ -1,85 +1,65 @@
 const { Doctor, AvailabilitySlot } = require("../models");
 
-exports.searchDoctors = async (req, res) => {
-  const {
-    specialization,
-    mode,
-    from,
-    to,
-    sort = "soonest",
-    page = 1,
-    limit = 10,
-  } = req.query;
-  const q = { isApproved: true };
-  if (specialization) q.specializations = specialization;
-  if (mode) q.modes = mode; // "online" | "in-person"
+const getDoctors = async (req, res) => {
+  try {
+    const { specialization, mode, date } = req.query;
+    let doctorQuery = { isApproved: true };
+    if (specialization) doctorQuery.specializations = specialization;
+    if (mode) doctorQuery.modes = mode;
 
-  const skip = (Number(page) - 1) * Number(limit);
-  const doctors = await Doctor.find(q).skip(skip).limit(Number(limit)).lean();
+    const doctors = await Doctor.find(doctorQuery);
+    const results = await Promise.all(
+      doctors.map(async (doc) => {
+        let slotQuery = {
+          doctorId: doc._id,
+          status: "available",
+        };
+        if (date) {
+          const startOfDay = new Date(date);
+          startOfDay.setHours(0, 0, 0, 0);
 
-  // attach 1-3 next slots each
-  const fromDt = from ? new Date(from) : new Date();
-  const toDt = to ? new Date(to) : undefined;
+          const endOfDay = new Date(date);
+          endOfDay.setHours(23, 59, 59, 999);
 
-  const doctorIds = doctors.map((d) => d._id);
-  const slotQ = {
-    doctorId: { $in: doctorIds },
-    status: "available",
-    startTime: { $gte: fromDt },
-  };
-  if (toDt) slotQ.startTime.$lte = toDt;
-  if (mode) slotQ.consultationMode = mode;
+          slotQuery.startTime = { $gte: startOfDay, $lte: endOfDay };
+        }
 
-  const slots = await AvailabilitySlot.find(slotQ)
-    .sort({ startTime: 1 })
-    .lean();
+        if (mode) {
+          slotQuery.consultationMode = mode;
+        }
+        const nextSlot = await AvailabilitySlot.findOne(slotQuery).sort(
+          "startTime"
+        );
 
-  const slotsByDoc = new Map();
-  for (const s of slots) {
-    const arr = slotsByDoc.get(s.doctorId.toString()) || [];
-    if (arr.length < 3)
-      arr.push({
-        _id: s._id,
-        startTime: s.startTime,
-        endTime: s.endTime,
-        mode: s.consultationMode,
-      });
-    slotsByDoc.set(s.doctorId.toString(), arr);
+        if (!nextSlot) return null;
+
+        return {
+          doctorId: doc._id,
+          name: doc.name,
+          specializations: doc.specializations,
+          modes: doc.modes,
+          consultationFee: doc.consultationFee,
+          nextAvailableSlot: {
+            slotId: nextSlot._id,
+            startTime: nextSlot.startTime,
+            endTime: nextSlot.endTime,
+            mode: nextSlot.consultationMode,
+          },
+        };
+      })
+    );
+    const filteredResults = results.filter((r) => r !== null);
+    filteredResults.sort(
+      (a, b) =>
+        new Date(a.nextAvailableSlot.startTime) -
+        new Date(b.nextAvailableSlot.startTime)
+    );
+
+    res.json(filteredResults);
+  } catch (error) {
+    console.error("Error in getDoctors:", error);
+    res.status(500).json({ message: "Server error" });
   }
-
-  let data = doctors.map((d) => ({
-    ...d,
-    nextSlots: slotsByDoc.get(d._id.toString()) || [],
-  }));
-  if (sort === "soonest") {
-    data.sort((a, b) => {
-      const aT = a.nextSlots[0]?.startTime
-        ? new Date(a.nextSlots[0].startTime).getTime()
-        : Infinity;
-      const bT = b.nextSlots[0]?.startTime
-        ? new Date(b.nextSlots[0].startTime).getTime()
-        : Infinity;
-      return aT - bT;
-    });
-  }
-  res.json({
-    page: Number(page),
-    limit: Number(limit),
-    count: data.length,
-    data,
-  });
 };
 
-exports.doctorSlots = async (req, res) => {
-  const { mode, from, to } = req.query;
-  const slotQ = {
-    doctorId: req.params.doctorId,
-    status: "available",
-    startTime: { $gte: from ? new Date(from) : new Date() },
-  };
-  if (to) slotQ.startTime.$lte = new Date(to);
-  if (mode) slotQ.consultationMode = mode;
-
-  const slots = await AvailabilitySlot.find(slotQ).sort({ startTime: 1 });
-  res.json(slots);
-};
+module.exports = { getDoctors };

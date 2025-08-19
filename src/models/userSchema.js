@@ -22,8 +22,6 @@ const userSchema = new mongoose.Schema(
       default: "patient",
       index: true,
     },
-
-    // account state
     isActive: { type: Boolean, default: true },
   },
   {

@@ -1,18 +1,28 @@
 const express = require("express");
-const {
-  listMine,
-  reschedule,
-  cancel,
-} = require("../controllers/appointmentController");
 const { authenticate } = require("../middlewares/verifyToken");
+const {
+  lockSlot,
+  confirmBooking,
+  releaseExpired,
+} = require("../controllers/appointmentController");
+const {
+  cancelAppointment,
+  rescheduleAppointment,
+} = require("../controllers/resheduleController");
 const router = express.Router();
 
-router.get("/me/appointments", authenticate(["patient"]), listMine);
+router.post("/lock", authenticate(["patient"]), lockSlot);
+router.post("/confirm", authenticate(["patient"]), confirmBooking);
+router.post("/release-expired", authenticate(["admin"]), releaseExpired);
 router.post(
-  "/appointments/:id/reschedule",
+  "/:appointmentId/cancel",
   authenticate(["patient"]),
-  reschedule
+  cancelAppointment
 );
-router.post("/appointments/:id/cancel", authenticate(["patient"]), cancel);
 
+router.post(
+  "/:appointmentId/reschedule",
+  authenticate(["patient"]),
+  rescheduleAppointment
+);
 module.exports = router;

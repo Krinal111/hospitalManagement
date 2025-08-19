@@ -1,10 +1,15 @@
-const { AvailabilitySlot } = require("../models");
+const cron = require("node-cron");
+const { AvailabilitySlot } = require("../models"); // import slot model
 
-async function cleanupExpiredLocks() {
+// Runs every 5 minutes
+cron.schedule("*/5 * * * *", async () => {
+  console.log("Running slot cleanup job...");
+
   const now = new Date();
   await AvailabilitySlot.updateMany(
     { status: "locked", lockedUntil: { $lt: now } },
-    { $set: { status: "available", lockedBy: null, lockedUntil: null } }
+    { $set: { status: "available", lockedUntil: null } }
   );
-}
-module.exports = { cleanupExpiredLocks };
+
+  console.log("Expired slots released");
+});

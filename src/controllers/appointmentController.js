@@ -1,125 +1,99 @@
-const mongoose = require("mongoose");
-const { Appointment, AvailabilitySlot } = require("../models");
+const { AvailabilitySlot, Appointment } = require("../models");
 
-exports.listMine = async (req, res) => {
-  const { status, scope, page = 1, limit = 10 } = req.query;
-  const q = { userId: req.user.id };
-  if (status) q.status = status;
+// 1️⃣ Lock Slot (5 min)
+const lockSlot = async (req, res) => {
+  try {
+    const { slotId, userId } = req.body;
 
-  const skip = (Number(page) - 1) * Number(limit);
-  const appts = await Appointment.find(q)
-    .populate({ path: "doctorId", select: "specializations consultationFee" })
-    .populate({ path: "slotId", select: "startTime endTime consultationMode" })
-    .sort({ "slotId.startTime": -1 })
-    .skip(skip)
-    .limit(Number(limit));
+    const slot = await AvailabilitySlot.findById(slotId);
 
-  const now = new Date();
-  const filtered =
-    scope === "upcoming"
-      ? appts.filter((a) => a.slotId?.startTime >= now)
-      : scope === "past"
-      ? appts.filter((a) => a.slotId?.startTime < now)
-      : appts;
-
-  res.json({
-    page: Number(page),
-    limit: Number(limit),
-    count: filtered.length,
-    data: filtered,
-  });
-};
-
-exports.reschedule = async (req, res) => {
-  const { id } = req.params;
-  const { newSlotId } = req.body || {};
-  const session = await mongoose.startSession();
-
-  await session.withTransaction(async () => {
-    const appt = await Appointment.findOne({
-      _id: id,
-      userId: req.user.id,
-      status: "booked",
-    })
-      .populate("slotId")
-      .session(session);
-    if (!appt) throw new Error("Appointment not found");
-
-    const now = new Date();
-    const H24 = 24 * 60 * 60 * 1000;
-    if (!appt.slotId || appt.slotId.startTime - now < H24) {
-      const e = new Error("Rescheduling allowed only >24h before start");
-      e.code = 403;
-      throw e;
+    if (!slot) return res.status(404).json({ message: "Slot not found" });
+    if (slot.status !== "available") {
+      return res.status(400).json({ message: "Slot not available" });
     }
 
-    // Lock & book new slot (simulate confirm, no OTP)
-    const newSlot = await AvailabilitySlot.findOneAndUpdate(
-      { _id: newSlotId, status: "available", startTime: { $gt: now } },
-      { $set: { status: "booked", lockedBy: null, lockedUntil: null } },
-      { new: true, session }
-    );
-    if (!newSlot) throw new Error("New slot not available");
+    // Lock for 5 min
+    const lockedUntil = new Date(Date.now() + 5 * 60 * 1000);
+    slot.status = "locked";
+    slot.lockedUntil = lockedUntil;
+    await slot.save();
 
-    // Cancel old appt & free old slot
-    appt.status = "cancelled";
-    await appt.save({ session });
-    await AvailabilitySlot.updateOne(
-      { _id: appt.slotId._id },
-      { $set: { status: "available", lockedBy: null, lockedUntil: null } },
-      { session }
-    );
-
-    // Create new appointment, link rescheduledFrom
-    await Appointment.create(
-      [
-        {
-          userId: appt.userId,
-          doctorId: newSlot.doctorId,
-          slotId: newSlot._id,
-          status: "booked",
-          consultationMode: newSlot.consultationMode,
-          rescheduledFrom: appt._id,
-        },
-      ],
-      { session }
-    );
-  });
-
-  session.endSession();
-  res.json({ message: "Rescheduled successfully" });
+    res.json({
+      message: "Slot locked for 5 minutes",
+      slotId: slot._id,
+      lockedUntil,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
 };
 
-exports.cancel = async (req, res) => {
-  const { id } = req.params;
-  const session = await mongoose.startSession();
-  await session.withTransaction(async () => {
-    const appt = await Appointment.findOne({
-      _id: id,
-      userId: req.user.id,
-      status: "booked",
-    })
-      .populate("slotId")
-      .session(session);
-    if (!appt) throw new Error("Appointment not found");
+const confirmBooking = async (req, res) => {
+  try {
+    const { slotId, userId, otp } = req.body; // otp can be skipped for demo
 
-    const now = new Date();
-    const H24 = 24 * 60 * 60 * 1000;
-    if (!appt.slotId || appt.slotId.startTime - now < H24) {
-      const e = new Error("Cancellation allowed only >24h before start");
-      e.code = 403;
-      throw e;
+    const slot = await AvailabilitySlot.findById(slotId);
+
+    if (!slot) return res.status(404).json({ message: "Slot not found" });
+
+    // Check lock validity
+    if (
+      slot.status !== "locked" ||
+      !slot.lockedUntil ||
+      new Date(slot.lockedUntil) < new Date()
+    ) {
+      // Reset slot if expired
+      slot.status = "available";
+      slot.lockedUntil = null;
+      await slot.save();
+      return res
+        .status(400)
+        .json({ message: "Slot lock expired, please rebook" });
     }
 
-    appt.status = "cancelled";
-    await appt.save({ session });
+    // Mark as booked
+    slot.status = "booked";
+    slot.lockedUntil = null;
+    await slot.save();
 
-    await AvailabilitySlot.updateOne(
-      { _id: appt.slotId._id },
-      { $set: { status: "available", lockedBy: null, lockedUntil: null } },
-      { session }
-    );
-  });
-  session.endSession();
-  res.json({ message: "Cancelled successfully" });
+    // Create appointment
+    const appointment = await Appointment.create({
+      userId,
+      doctorId: slot.doctorId,
+      slotId: slot._id,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      mode: slot.consultationMode,
+      status: "booked",
+    });
+
+    res.json({
+      message: "Booking confirmed",
+      appointment,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
 };
+
+const releaseExpired = async (req, res) => {
+  try {
+    const now = new Date();
+    const result = await AvailabilitySlot.updateMany(
+      { status: "locked", lockedUntil: { $lt: now } },
+      { $set: { status: "available", lockedUntil: null } }
+    );
+
+    res.json({
+      message: "Expired locks released",
+      released: result.modifiedCount,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+module.exports = { lockSlot, confirmBooking, releaseExpired };
