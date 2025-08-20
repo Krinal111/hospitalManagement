@@ -1,8 +1,7 @@
 const { AvailabilitySlot, Doctor } = require("../models");
 
-// Business rule: skip lunch break between 12:00 and 14:30 for all generated slots
-const LUNCH_BREAK_START_MINUTES = 12 * 60; // 12:00
-const LUNCH_BREAK_END_MINUTES = 14 * 60 + 30; // 14:30
+const LUNCH_BREAK_START_MINUTES = 12 * 60;
+const LUNCH_BREAK_END_MINUTES = 14 * 60 + 30;
 
 function getMinutesOfDay(date) {
   return date.getHours() * 60 + date.getMinutes();
@@ -11,7 +10,6 @@ function getMinutesOfDay(date) {
 function doesSlotOverlapLunch(startDate, endDate) {
   const startMinutes = getMinutesOfDay(startDate);
   const endMinutes = getMinutesOfDay(endDate);
-  // Overlap if slot starts before lunch end and ends after lunch start
   return (
     startMinutes < LUNCH_BREAK_END_MINUTES &&
     endMinutes > LUNCH_BREAK_START_MINUTES
@@ -31,24 +29,20 @@ exports.addAvailability = async (req, res) => {
     if (!doctor)
       return res.status(404).json({ message: "Doctor profile not found" });
 
-    // If slotDuration provided, generate multiple slots within the single day window
     if (slotDuration) {
       const start = new Date(startTime);
       const end = new Date(endTime);
       if (start.toDateString() !== end.toDateString()) {
-        return res
-          .status(400)
-          .json({
-            message:
-              "For multi-slot generation, start and end must be on the same day",
-          });
+        return res.status(400).json({
+          message:
+            "For multi-slot generation, start and end must be on the same day",
+        });
       }
       const slots = [];
       let current = new Date(start);
       while (current < end) {
         const slotEnd = new Date(current.getTime() + slotDuration * 60000);
         if (slotEnd > end) break;
-        // Skip lunch break overlap
         if (doesSlotOverlapLunch(current, slotEnd)) {
           current = slotEnd;
           continue;
@@ -65,7 +59,6 @@ exports.addAvailability = async (req, res) => {
       return res.status(201).json({ message: "Slots created", slots: saved });
     }
 
-    // Otherwise create a single slot
     const slot = new AvailabilitySlot({
       doctorId: doctor._id,
       startTime,
@@ -94,7 +87,6 @@ exports.addRecurringAvailability = async (req, res) => {
     } = req.body;
     const userId = req.user?.id;
 
-    // New weekly recurrence path if fromDate/toDate/daysOfWeek provided
     if (
       fromDate &&
       toDate &&
@@ -102,12 +94,10 @@ exports.addRecurringAvailability = async (req, res) => {
       daysOfWeek.length > 0
     ) {
       if (!slotDuration || !consultationMode || !startTime || !endTime) {
-        return res
-          .status(400)
-          .json({
-            message:
-              "fromDate, toDate, daysOfWeek, startTime, endTime, slotDuration, consultationMode are required",
-          });
+        return res.status(400).json({
+          message:
+            "fromDate, toDate, daysOfWeek, startTime, endTime, slotDuration, consultationMode are required",
+        });
       }
 
       const doctor = await Doctor.findOne({ user: userId });
@@ -117,7 +107,6 @@ exports.addRecurringAvailability = async (req, res) => {
       const from = new Date(fromDate);
       const to = new Date(toDate);
 
-      // Parse time-of-day robustly (supports "HH:mm" or any Date string)
       const parseTimeOfDay = (val) => {
         if (typeof val === "string" && /^\d{1,2}:\d{2}$/.test(val)) {
           const [h, m] = val.split(":").map(Number);
@@ -149,7 +138,7 @@ exports.addRecurringAvailability = async (req, res) => {
       for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
         const name = d.toLocaleDateString("en-US", { weekday: "long" });
         if (!daySet.has(name)) continue;
-        // Build day window
+
         const dayStart = new Date(d);
         dayStart.setHours(Number(startHour), Number(startMin), 0, 0);
         const dayEnd = new Date(d);
@@ -159,7 +148,7 @@ exports.addRecurringAvailability = async (req, res) => {
         while (current < dayEnd) {
           const slotEnd = new Date(current.getTime() + slotDuration * 60000);
           if (slotEnd > dayEnd) break;
-          // Skip lunch break overlap
+
           if (doesSlotOverlapLunch(current, slotEnd)) {
             current = slotEnd;
             continue;
@@ -226,10 +215,14 @@ exports.addRecurringAvailability = async (req, res) => {
 exports.getDoctorSlots = async (req, res) => {
   try {
     const { doctorId } = req.params;
+    const now = new Date();
+
     const slots = await AvailabilitySlot.find({
       doctorId,
       status: { $in: ["available", "booked", "locked"] },
+      endTime: { $gt: now },
     }).sort("startTime");
+
     res.json(slots);
   } catch (error) {
     console.error("Error fetching doctor slots:", error);

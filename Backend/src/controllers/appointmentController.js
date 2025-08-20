@@ -1,6 +1,5 @@
 const { AvailabilitySlot, Appointment, Doctor } = require("../models");
 
-// 1️⃣ Lock Slot (5 min)
 const lockSlot = async (req, res) => {
   try {
     const { slotId } = req.body;
@@ -9,7 +8,8 @@ const lockSlot = async (req, res) => {
     const slot = await AvailabilitySlot.findById(slotId);
 
     if (!slot) return res.status(404).json({ message: "Slot not found" });
-    // If slot is locked but expired, release it first
+
+    // Release expired lock
     if (
       slot.status === "locked" &&
       slot.lockedUntil &&
@@ -21,11 +21,21 @@ const lockSlot = async (req, res) => {
       await slot.save();
     }
 
-    if (slot.status !== "available") {
+    // 🔑 If slot is locked by another user → not available
+    if (slot.status === "locked" && slot.lockedBy.toString() !== userId) {
       return res.status(400).json({ message: "Slot not available" });
     }
 
-    // Lock for 5 min
+    // 🔑 If the same user already locked → just return success (no need to relock)
+    if (slot.status === "locked" && slot.lockedBy.toString() === userId) {
+      return res.json({
+        message: "Slot already locked by you",
+        slotId: slot._id,
+        lockedUntil: slot.lockedUntil,
+      });
+    }
+
+    // Otherwise lock for 5 min
     const lockedUntil = new Date(Date.now() + 5 * 60 * 1000);
     slot.status = "locked";
     slot.lockedUntil = lockedUntil;

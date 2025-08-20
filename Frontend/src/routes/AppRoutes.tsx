@@ -11,12 +11,12 @@ import DoctorOnboarding from "../pages/DoctorOnboarding";
 import DoctorAvailability from "../pages/DoctorAvailability";
 import DoctorRecurringAvailability from "../pages/DoctorRecurringAvailability";
 import AdminPendingDoctors from "../pages/AdminPendingDoctors";
-import DoctorCalendarInteractive from "../pages/DoctorCalendarInteractive";
+import SlotPicker from "../pages/SlotPicker"; 
 
 function AppRoutes() {
   const routes = useRoutes([
     {
-      element: <ProtectedRoute />, // no children passed
+      element: <ProtectedRoute />, 
       children: [
         { path: "/", element: <Home /> },
         { path: "/discover", element: <DoctorDiscovery /> },
@@ -25,7 +25,7 @@ function AppRoutes() {
         { path: "/doctor/onboarding", element: <DoctorOnboarding /> },
         { path: "/doctor/availability", element: <DoctorAvailability /> },
         { path: "/doctor/availability/recurring", element: <DoctorRecurringAvailability /> },
-        { path: "/doctor/calendar/:doctorId", element: <DoctorCalendarInteractive /> },
+        { path: "/doctor/calendar/:doctorId", element: <SlotPicker /> },
         { path: "/admin/pending-doctors", element: <AdminPendingDoctors /> },
       ],
     },

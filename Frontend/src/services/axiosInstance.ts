@@ -1,28 +1,40 @@
 import axios from "axios";
-import { refreshAccessToken } from "./authServices";
+import { refreshAccessToken } from "../services/authServices";
 
-export const axiosInstance = axios.create({
+const API = axios.create({
   baseURL: "http://localhost:5000/api",
 });
 
-axiosInstance.interceptors.request.use(async (config) => {
-  const token = localStorage.getItem("accessToken");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+// Request interceptor → attach token to headers
+API.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("accessToken");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
-axiosInstance.interceptors.response.use(
-  (res) => res,
-  async (err) => {
-    const originalReq = err.config;
-    if (err.response?.status === 401 && !originalReq._retry) {
-      originalReq._retry = true;
+// Response interceptor → handle expired tokens
+API.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
       const newToken = await refreshAccessToken();
       if (newToken) {
-        originalReq.headers.Authorization = `Bearer ${newToken}`;
-        return axios(originalReq);
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return API(originalRequest); // retry with new token
       }
     }
-    return Promise.reject(err);
+
+    return Promise.reject(error);
   }
 );
+
+export default API;

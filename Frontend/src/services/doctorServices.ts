@@ -1,4 +1,4 @@
-import { axiosInstance } from "./axiosInstance";
+import API from "./axiosInstance";
 
 export interface DoctorDiscoveryQuery {
   specialization?: string;
@@ -21,15 +21,14 @@ export interface DoctorDiscoveryResult {
 }
 
 export async function discoverDoctors(params: DoctorDiscoveryQuery) {
-  const res = await axiosInstance.get<DoctorDiscoveryResult[]>(
-    "/doctor/discover",
-    { params }
-  );
+  const res = await API.get<DoctorDiscoveryResult[]>("/doctor/discover", {
+    params,
+  });
   return res.data;
 }
 
 export async function getDoctorSlots(doctorId: string) {
-  const res = await axiosInstance.get(`/availability/${doctorId}`);
+  const res = await API.get(`/availability/${doctorId}`);
   return res.data as Array<{
     _id: string;
     startTime: string;
@@ -45,7 +44,7 @@ export async function onboardingDoctor(payload: {
   modes: ("online" | "in_person")[];
   consultationFee?: number;
 }) {
-  const res = await axiosInstance.post("/doctor/onboarding", payload);
+  const res = await API.post("/doctor/onboarding", payload);
   return res.data;
 }
 
@@ -55,7 +54,7 @@ export async function addAvailability(payload: {
   consultationMode: "online" | "in_person";
   slotDuration?: number;
 }) {
-  const res = await axiosInstance.post("/availability/add", payload);
+  const res = await API.post("/availability/add", payload);
   return res.data;
 }
 
@@ -63,31 +62,30 @@ export async function addRecurringAvailability(payload: {
   // legacy single-day
   dayOfWeek?: string;
   startTime: string; // time or datetime
-  endTime: string;   // time or datetime
+  endTime: string; // time or datetime
   consultationMode: "online" | "in_person";
   slotDuration: number;
   // new weekly recurrence
   fromDate?: string; // yyyy-mm-dd
-  toDate?: string;   // yyyy-mm-dd
+  toDate?: string; // yyyy-mm-dd
   daysOfWeek?: string[]; // ["Monday",...]
 }) {
-  const res = await axiosInstance.post("/availability/add-recurring", payload);
+  const res = await API.post("/availability/add-recurring", payload);
   return res.data;
 }
 
 // Admin endpoints
 export async function getPendingDoctors() {
-  const res = await axiosInstance.get("/admin/get-pending-doctors");
+  const res = await API.get("/admin/get-pending-doctors");
   return res.data as Array<any>;
 }
 
 export async function approveDoctor(doctorId: string) {
-  const res = await axiosInstance.patch(`/admin/${doctorId}/approve`);
+  const res = await API.patch(`/admin/${doctorId}/approve`);
   return res.data;
 }
 
 export async function getMyDoctorProfile() {
-  const res = await axiosInstance.get(`/doctor/me`);
+  const res = await API.get(`/doctor/me`);
   return res.data as { doctorId: string; doctor: any };
 }
-

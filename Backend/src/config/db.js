@@ -1,4 +1,3 @@
-// config/db.js
 const mongoose = require("mongoose");
 require("dotenv").config();
 
@@ -16,3 +15,5 @@ async function connectDB() {
 }
 
 module.exports = { connectDB };
+
+// https://github.com/Krinal111/hospitalManagement/pull/1

@@ -37,7 +37,6 @@ export default function DoctorDiscovery() {
 
   useEffect(() => {
     runSearch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -53,9 +52,7 @@ export default function DoctorDiscovery() {
             <SelectValue placeholder="Any mode" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="anymode" disabled>
-              Any mode
-            </SelectItem>
+           
             <SelectItem value="online">Online</SelectItem>
             <SelectItem value="in_person">In-person</SelectItem>
           </SelectContent>

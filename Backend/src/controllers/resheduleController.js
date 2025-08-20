@@ -13,18 +13,16 @@ exports.cancelAppointment = async (req, res) => {
 
     const now = new Date();
     const diffHours = (appointment.startTime - now) / (1000 * 60 * 60);
+    console.log("diffHours", diffHours);
 
     if (diffHours < 24) {
       return res
         .status(400)
         .json({ message: "Cancellation allowed only >24h before" });
     }
-
-    // Update appointment
     appointment.status = "cancelled";
     await appointment.save();
 
-    // Release slot
     await AvailabilitySlot.findByIdAndUpdate(appointment.slotId, {
       status: "available",
       lockedUntil: null,
@@ -58,7 +56,6 @@ exports.rescheduleAppointment = async (req, res) => {
         .json({ message: "Reschedule allowed only >24h before" });
     }
 
-    // Release old slot
     await AvailabilitySlot.findByIdAndUpdate(appointment.slotId, {
       status: "available",
       lockedUntil: null,

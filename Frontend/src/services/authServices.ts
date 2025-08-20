@@ -30,7 +30,7 @@ export const register = async (
 };
 
 // Refresh access token using refresh token
-export const refreshAccessToken = async (): Promise<string | null> => {
+export const  refreshAccessToken = async (): Promise<string | null> => {
   try {
     const refreshToken = localStorage.getItem("refreshToken");
     if (!refreshToken) return null;

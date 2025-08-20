@@ -36,9 +36,9 @@ export default function AppSidebarLayout({ children }: { children: React.ReactNo
             <SidebarMenu>
               {items.map((m) => (
                 <SidebarMenuItem key={m.href}>
-                  <SidebarMenuButton asChild isActive={location.pathname === m.href}>
+                  <SidebarMenuButton asChild isActive={location.pathname === m.href} className="text-2xs">
                     <Link to={m.href}>
-                      <m.icon className="size-4" />
+                      <m.icon className="size-4 font-bold" />
                       <span>{m.label}</span>
                     </Link>
                   </SidebarMenuButton>
@@ -48,7 +48,7 @@ export default function AppSidebarLayout({ children }: { children: React.ReactNo
           </SidebarGroup>
         </SidebarContent>
         <SidebarFooter>
-          <Button variant="outline" onClick={logout}>Logout</Button>
+          <Button variant="default" onClick={logout}>Logout</Button>
         </SidebarFooter>
       </Sidebar>
       <div className="md:ml-64 p-4">{children}</div>
